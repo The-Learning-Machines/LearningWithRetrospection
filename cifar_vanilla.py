@@ -12,11 +12,11 @@ from torch.utils.tensorboard import SummaryWriter
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
+        self.conv1 = nn.Conv2d(3, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
+        self.fc1 = nn.Linear(12544, 128)
         self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
@@ -31,8 +31,7 @@ class Net(nn.Module):
         x = F.relu(x)
         x = self.dropout2(x)
         x = self.fc2(x)
-        output = F.log_softmax(x, dim=1)
-        return output
+        return F.log_softmax(x, dim=1)
 
 
 global_step = 0
@@ -125,12 +124,12 @@ def main():
 
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-    dataset1 = datasets.MNIST('./', train=True, download=False,
-                              transform=transform)
-    dataset2 = datasets.MNIST('./', train=False,
-                              transform=transform)
+    dataset1 = datasets.CIFAR10('./', train=True, download=False,
+                                transform=transform)
+    dataset2 = datasets.CIFAR10('./', train=False,
+                                transform=transform)
     train_loader = torch.utils.data.DataLoader(dataset1, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 

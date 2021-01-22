@@ -6,6 +6,10 @@ import torch.nn.functional as F
 
 
 def soft_crossentropy(logits, y_true, dim):
+    return -1 * (torch.log_softmax(logits, dim=dim) * y_true).sum(axis=1).mean(axis=0)
+
+
+def crossentropy(logits, y_true, dim):
     if dim == 1:
         return F.cross_entropy(logits, y_true)
     else:
@@ -23,14 +27,19 @@ class LWR(torch.nn.Module):
     def __init__(
         self,
         k: int,
-        update_rate: float,
         num_batches_per_epoch: int,
         dataset_length: int,
         output_shape: Tuple[int],
-        tau: float,
         max_epochs: int,
+        tau=5.,
+        update_rate=0.9,
         softmax_dim=1
     ):
+        '''
+        Args:
+            k: int, Number of Epochs after which soft labels are updated (interval)
+            num_batches
+        '''
         super().__init__()
         self.k = k
         self.update_rate = update_rate
@@ -79,10 +88,10 @@ class LWR(torch.nn.Module):
         batch_idx: Tensor,
     ):
         # assert(logits.shape == y_true.shape)
-        return self.alpha * soft_crossentropy(logits, y_true, dim=self.softmax_dim) +\
+        return self.alpha * crossentropy(logits, y_true, dim=self.softmax_dim) +\
             (1 - self.alpha) * self.tau * self.tau *\
             F.kl_div(
-                F.log_softmax(logits, dim=self.softmax_dim),
+                F.log_softmax(logits / self.tau, dim=self.softmax_dim),
                 self.labels[batch_idx, ...].to(logits.get_device()),
                 reduction='batchmean'
         )

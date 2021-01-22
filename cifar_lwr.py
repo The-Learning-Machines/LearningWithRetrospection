@@ -13,11 +13,11 @@ from torch.utils.tensorboard import SummaryWriter
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
+        self.conv1 = nn.Conv2d(3, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
+        self.fc1 = nn.Linear(12544, 128)
         self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
@@ -32,7 +32,6 @@ class Net(nn.Module):
         x = F.relu(x)
         x = self.dropout2(x)
         x = self.fc2(x)
-        # output = F.log_softmax(x, dim=1)
         return x
 
 
@@ -69,7 +68,8 @@ def test(model, device, test_loader, writer):
             data, target = data.to(device), target.to(device)
             output = model(data)
             # sum up batch loss
-            test_loss += F.nll_loss(output, target, reduction='sum').item()
+            test_loss += F.cross_entropy(output,
+                                         target, reduction='sum').item()
             # get the index of the max log-probability
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
@@ -137,18 +137,18 @@ def main():
 
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-    dataset1 = datasets.MNIST('./', train=True, download=False,
-                              transform=transform)
+    dataset1 = datasets.CIFAR10('./', train=True, download=False,
+                                transform=transform)
     dataset1 = DatasetWrapper(dataset1)
 
-    dataset2 = datasets.MNIST('./', train=False,
-                              transform=transform)
+    dataset2 = datasets.CIFAR10('./', train=False,
+                                transform=transform)
     dataset2 = DatasetWrapper(dataset2)
 
     lwr = LWR(
-        k=1,
+        k=5,
         update_rate=0.9,
         num_batches_per_epoch=len(dataset1) // train_kwargs['batch_size'],
         dataset_length=len(dataset1),
@@ -172,7 +172,7 @@ def main():
         scheduler.step()
 
     if args.save_model:
-        torch.save(model.state_dict(), "mnist_cnn.pt")
+        torch.save(model.state_dict(), "cifar10_cnn.pt")
 
 
 if __name__ == '__main__':
