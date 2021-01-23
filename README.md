@@ -4,6 +4,11 @@
 
 - `LearningWithRetrospection.py` contains class `LWR` which implements the algorithm in [this paper](https://arxiv.org/abs/2012.13098)
 
+### Algorithm
+
+<img src="./LWR.png" width="500px"></img>
+
+
 ### Usage
 
     lwr = LWR(
