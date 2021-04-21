@@ -38,13 +38,28 @@ class Net(nn.Module):
 global_step = 0
 
 
-def train(args, model, device, train_loader, optimizer, epoch, lwr, writer):
+def train(
+    args, model, device, train_loader, optimizer, epoch, lwr, writer, k, snapshot=None,
+):
     model.train()
     for i, (batch_idx, data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        output = model(data)
-        loss = lwr(batch_idx, output, target, eval=False)
+
+        if args.usekl:
+            output = model(data)
+            loss = lwr(batch_idx, output, target, eval=False)
+
+        else:
+            output = model(data)
+            if epoch >= k:
+                assert snapshot != None
+                previous_output = snapshot(data)
+            else:
+                previous_output = None
+
+            loss = lwr(batch_idx, output, target, previous_output, eval=False)
+
         loss.backward()
         optimizer.step()
 
@@ -102,7 +117,7 @@ class DatasetWrapper(torch.utils.data.Dataset):
         return len(self.ds)
 
     def __getitem__(self, idx):
-        return idx, *self.ds[idx]
+        return idx, self.ds[idx][0], self.ds[idx][1]
 
 
 def main():
@@ -170,7 +185,7 @@ def main():
     )
 
     parser.add_argument(
-        "--use-kl",
+        "--usekl",
         action="store_true",
         default=True,
         help="Use KL Divergence loss | Uses L1 loss from https://arxiv.org/abs/2006.13593 if False",
@@ -207,7 +222,7 @@ def main():
         tau=5,
         max_epochs=20,
         softmax_dim=1,
-        use_kl=args.use-kl
+        use_kl=args.usekl,
     )
     writer = SummaryWriter("./logs/lwr/")
 
@@ -215,11 +230,27 @@ def main():
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
     model = Net().to(device)
+    snapshot = None
+
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, optimizer, epoch, lwr, writer)
+        if (not args.usekl) and (epoch % k == 0):
+            snapshot = deepcopy(model)
+
+        train(
+            args,
+            model,
+            device,
+            train_loader,
+            optimizer,
+            epoch,
+            lwr,
+            writer,
+            k,
+            snapshot=snapshot,
+        )
         test(model, device, test_loader, writer)
         scheduler.step()
 

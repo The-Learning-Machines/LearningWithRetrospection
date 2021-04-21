@@ -3,6 +3,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 import torch.nn.functional as F
+import torch.nn as nn
 
 
 def soft_crossentropy(logits, y_true, dim):
@@ -30,7 +31,7 @@ class LWR(torch.nn.Module):
         tau=5.0,
         update_rate=0.9,
         softmax_dim=1,
-        use_kl=True
+        use_kl=False,
     ):
         """
         Args:
@@ -53,9 +54,16 @@ class LWR(torch.nn.Module):
         self.softmax_dim = softmax_dim
 
         self.labels = torch.zeros((dataset_length, *output_shape))
-        self.use_kl = use_kl
+        self.usekl = use_kl
 
-    def forward(self, batch_idx: Tensor, logits: Tensor, y_true: Tensor, eval=False):
+    def forward(
+        self,
+        batch_idx: Tensor,
+        logits: Tensor,
+        y_true: Tensor,
+        previous_output=None,
+        eval=False,
+    ):
         self.alpha = 1 - self.update_rate * self.epoch_count * self.k / self.max_epochs
         if self.epoch_count <= self.k:
             self.step_count += 1
@@ -67,25 +75,27 @@ class LWR(torch.nn.Module):
 
             if self.epoch_count == self.k and eval is False:
                 # print(self.labels[batch_idx, ...].shape, logits.shape)
-                self.labels[batch_idx, ...] = (
-                    torch.softmax(logits / self.tau, dim=self.softmax_dim)
-                    .detach()
-                    .clone()
-                    .cpu()
-                )
+                if self.usekl:
+                    self.labels[batch_idx, ...] = (
+                        torch.softmax(logits / self.tau, dim=self.softmax_dim)
+                        .detach()
+                        .clone()
+                        .cpu()
+                    )
             return F.cross_entropy(logits, y_true)
         else:
-            if (self.epoch_count + 1) % self.k == 0 and eval is False:
-                self.labels[batch_idx, ...] = (
-                    torch.softmax(logits / self.tau, dim=self.softmax_dim)
-                    .detach()
-                    .clone()
-                    .cpu()
-                )
-            if self.use_kl:
+            if (self.epoch_count + 1) % self.k == 0 and eval is False and use_kl:
+                if self.usekl:
+                    self.labels[batch_idx, ...] = (
+                        torch.softmax(logits / self.tau, dim=self.softmax_dim)
+                        .detach()
+                        .clone()
+                        .cpu()
+                    )
+            if self.usekl:
                 return self.loss_fn_with_kl(logits, y_true, batch_idx)
             else:
-                return self.L1_loss_fn(logits, y_true, batch_idx)
+                return self.L1_loss_fn(logits, y_true, previous_output)
 
     def loss_fn_with_kl(
         self, logits: Tensor, y_true: Tensor, batch_idx: Tensor,
@@ -99,7 +109,7 @@ class LWR(torch.nn.Module):
             reduction="batchmean",
         )
 
-    def L1_loss_fn(self, logits: Tensor, y_true: Tensor, batch_idx: Tensor):
+    def L1_loss_fn(self, logits: Tensor, y_true: Tensor, previous_output: Tensor):
         """
         From Jandial, Surgan, et al. 
         "Retrospective Loss: Looking Back 
@@ -109,11 +119,12 @@ class LWR(torch.nn.Module):
         Discovery & Data Mining. 2020.
         """
         task_loss = crossentropy(logits, y_true, dim=self.softmax_dim)
-        L1loss1 = nn.L1Loss()
-        L1loss2 = nn.L1Loss()
 
-        retrospective_loss = (self.scaling + 1) * L1loss1(logits, y_true) - (
-            self.scaling
-        ) * L1loss2(logits, self.labels[batch_idx, ...].to(logits.get_device()))
+        logit_final = torch.argmax(logits, dim=1).float()
+
+        b = nn.L1Loss()(logits.detach().cpu(), previous_output.detach().cpu())
+        a = nn.L1Loss()(logit_final.detach().cpu(), y_true.detach().cpu())
+
+        retrospective_loss = ((self.scaling + 1) * a) - ((self.scaling) * b)
 
         return task_loss + retrospective_loss
