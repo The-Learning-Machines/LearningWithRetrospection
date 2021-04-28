@@ -118,12 +118,13 @@ class LWR(torch.nn.Module):
         International Conference on Knowledge 
         Discovery & Data Mining. 2020.
         """
-        task_loss = crossentropy(logits, y_true, dim=self.softmax_dim)
+        task_loss = F.cross_entropy(logits, y_true)
+        logits = F.softmax(logits, dim=1)
+        previous_output = F.softmax(previous_output, dim=1)
 
-        logit_final = torch.argmax(logits, dim=1).float()
 
-        b = nn.L1Loss()(logits.detach().cpu(), previous_output.detach().cpu())
-        a = nn.L1Loss()(logit_final.detach().cpu(), y_true.detach().cpu())
+        b = nn.L1Loss()(logits, previous_output.detach())
+        a = nn.L1Loss()(logits, y_true)
 
         retrospective_loss = ((self.scaling + 1) * a) - ((self.scaling) * b)
 
