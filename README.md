@@ -15,7 +15,6 @@
 ### Usage
 
 ```python
-
     lwr = LWR(
         k=1, # Number of Epochs (Interval) to update soft labels
         update_rate=0.9, # The rate at which True Label weightage is decayed
@@ -33,5 +32,4 @@
     loss = lwr(batch_idx, output, target, eval=False) # LWR expects LOGITS
     loss.backward()
     optimizer.step()
-    
 ```
